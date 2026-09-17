@@ -27,14 +27,14 @@ export function NotificationBell() {
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel className="flex justify-between items-center">
+        <div className="flex justify-between items-center px-2 py-1.5 text-sm font-semibold text-muted-foreground">
           <span>Notifications</span>
           {unreadCount > 0 && (
             <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
               {unreadCount} new
             </span>
           )}
-        </DropdownMenuLabel>
+        </div>
         <DropdownMenuSeparator />
         <div className="max-h-[300px] overflow-y-auto">
           {notifications.length === 0 ? (

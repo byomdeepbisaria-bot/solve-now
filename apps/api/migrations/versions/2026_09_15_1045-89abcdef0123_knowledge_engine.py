@@ -10,7 +10,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision: str = '89abcdef0123'
@@ -18,18 +17,51 @@ down_revision: Union[str, None] = 'def012345678'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+
+def _pgvector_available(conn) -> bool:
+    """Check if pgvector is installable without executing DDL that could abort the transaction."""
+    try:
+        result = conn.execute(sa.text(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'vector'"
+        ))
+        if result.fetchone():
+            # Available — now install it
+            conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def upgrade() -> None:
-    # 1. Enable pgvector
-    op.execute('CREATE EXTENSION IF NOT EXISTS vector')
-    
-    # 2. Add embedding to Problem
-    op.add_column('problems', sa.Column('embedding', Vector(768), nullable=True))
-    
+    conn = op.get_bind()
+
+    # 1. Try to enable pgvector — skip silently if not installed
+    use_vector = _pgvector_available(conn)
+
+    # 2. Add embedding to problems — use vector if available, else FLOAT[]
+    result = conn.execute(sa.text(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_name='problems' AND column_name='embedding'"
+    ))
+    if not result.fetchone():
+        if use_vector:
+            conn.execute(sa.text(
+                "ALTER TABLE problems ADD COLUMN embedding vector(768)"
+            ))
+        else:
+            conn.execute(sa.text(
+                "ALTER TABLE problems ADD COLUMN embedding FLOAT[]"
+            ))
+
     # 3. Create Enum
     knowledge_status = postgresql.ENUM('DRAFT', 'PUBLISHED', 'ARCHIVED', 'FLAGGED', name='knowledgestatus', create_type=False)
     knowledge_status.create(op.get_bind())
 
-    # 4. Create KnowledgeDocument
+    # 4. Create KnowledgeDocument — use vector or FLOAT[] for embedding
+    embedding_col = (
+        sa.Column('embedding', sa.Text(), nullable=True)  # placeholder; actual type set below
+    )
     op.create_table('knowledge_documents',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('title', sa.String(), nullable=False),
@@ -38,12 +70,20 @@ def upgrade() -> None:
         sa.Column('status', knowledge_status, nullable=False),
         sa.Column('quality_score', sa.Integer(), nullable=True),
         sa.Column('verification_count', sa.Integer(), nullable=True),
-        sa.Column('embedding', Vector(768), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
         sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['category_id'], ['problem_categories.id']),
         sa.PrimaryKeyConstraint('id')
     )
+    # Add embedding column with right type
+    if use_vector:
+        conn.execute(sa.text(
+            "ALTER TABLE knowledge_documents ADD COLUMN embedding vector(768)"
+        ))
+    else:
+        conn.execute(sa.text(
+            "ALTER TABLE knowledge_documents ADD COLUMN embedding FLOAT[]"
+        ))
 
     # 5. Create KnowledgeSource
     op.create_table('knowledge_sources',
@@ -70,6 +110,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id')
     )
 
+
 def downgrade() -> None:
     pass
-

@@ -25,11 +25,10 @@ export default function Login() {
       if (res.data?.access_token) {
         localStorage.setItem('access_token', res.data.access_token)
       }
-      router.push('/')
-      router.refresh()
+      // Hard redirect so the new token is picked up by all components
+      window.location.href = '/'
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'An error occurred during login')
-    } finally {
+      setError(err.response?.data?.detail || 'Invalid email or password')
       setLoading(false)
     }
   }

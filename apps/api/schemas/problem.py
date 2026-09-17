@@ -106,16 +106,17 @@ class ProblemResponse(ProblemBase):
     id: uuid.UUID
     public_id: str
     author_id: uuid.UUID
+    author_username: Optional[str] = None
     status: ProblemStatus
     created_at: datetime
     updated_at: Optional[datetime] = None
     solved_at: Optional[datetime] = None
-    
+
     category: Optional[CategoryResponse] = None
     tags: List[TagResponse] = []
     files: List[ProblemFileResponse] = []
     investigation: Optional[InvestigationResponse] = None
-    
+
     class Config:
         from_attributes = True
 

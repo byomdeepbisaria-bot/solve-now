@@ -55,7 +55,11 @@ def get_current_user_optional(
     if denied_token:
         return None
 
-    user = db.query(User).filter(User.id == token_data).first()
+    try:
+        user_uuid = uuid.UUID(token_data)
+    except (ValueError, AttributeError):
+        return None
+    user = db.query(User).filter(User.id == user_uuid).first()
     if not user:
         return None
     if not user.is_active:
@@ -82,7 +86,11 @@ def get_current_user(
     if denied_token:
         raise HTTPException(status_code=401, detail="Token has been revoked")
 
-    user = db.query(User).filter(User.id == token_data).first()
+    try:
+        user_uuid = uuid.UUID(token_data)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+    user = db.query(User).filter(User.id == user_uuid).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if not user.is_active:

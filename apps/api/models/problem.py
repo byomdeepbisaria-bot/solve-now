@@ -1,12 +1,23 @@
 import uuid
-from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Enum, Integer, Table
+import os
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Enum, Integer, Table, ARRAY, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
 import enum
 
 from .base import Base
+
+# Use pgvector if available, otherwise fall back to ARRAY(Float)
+_USE_PGVECTOR = False
+try:
+    if os.environ.get("PGVECTOR_ENABLED", "").lower() != "false":
+        from pgvector.sqlalchemy import Vector as _Vector
+        _USE_PGVECTOR = True
+except Exception:
+    pass
+
+EmbeddingColumn = _Vector(768) if _USE_PGVECTOR else ARRAY(Float)
 
 class ProblemStatus(str, enum.Enum):
     DRAFT = "DRAFT"
@@ -52,7 +63,7 @@ class Problem(Base):
 
     location = Column(String, nullable=True)
 
-    embedding = Column(Vector(768), nullable=True)
+    embedding = Column(EmbeddingColumn, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

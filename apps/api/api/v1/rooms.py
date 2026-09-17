@@ -125,6 +125,9 @@ def get_room_messages(
             raise HTTPException(status_code=403, detail="Not authorized to enter this private room")
             
     messages = db.query(RoomMessage).filter(RoomMessage.room_id == room_id).order_by(RoomMessage.created_at.asc()).all()
+    for msg in messages:
+        msg.author_username = msg.author.username if msg.author else None
+        msg.author_email = msg.author.email if msg.author else None
     return messages
 
 @router.post("/rooms/{room_id}/messages", response_model=MessageResponse)
@@ -152,6 +155,8 @@ async def create_message(
     db.add(msg)
     db.commit()
     db.refresh(msg)
+    msg.author_username = current_user.username
+    msg.author_email = current_user.email
     
     # Broadcast user's message via WS Manager
     await manager.broadcast_to_room(str(room_id), {
@@ -161,6 +166,7 @@ async def create_message(
             "content": msg.content,
             "author_id": str(msg.author_id),
             "author_email": current_user.email,
+            "author_username": current_user.username,
             "created_at": msg.created_at.isoformat()
         }
     })

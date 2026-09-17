@@ -6,23 +6,29 @@ from core.database import get_db
 from core.security import create_access_token, get_password_hash, verify_password
 from core.config import settings
 from models.user import User
-from schemas.user import UserCreate, UserResponse
+from schemas.user import UserCreate, UserLogin, UserResponse
 from api.deps import get_current_user
 
 router = APIRouter()
 
 @router.post("/register", response_model=UserResponse)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_in.email).first()
-    if user:
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this email already exists in the system.",
-        )
-    
+    if db.query(User).filter(User.email == user_in.email).first():
+        raise HTTPException(status_code=400, detail="The user with this email already exists in the system.")
+
+    # Derive username from input or fall back to email prefix
+    desired_username = user_in.username or user_in.email.split("@")[0]
+    # Ensure username uniqueness — append suffix if taken
+    base = desired_username
+    suffix = 1
+    while db.query(User).filter(User.username == desired_username).first():
+        desired_username = f"{base}{suffix}"
+        suffix += 1
+
     hashed_password = get_password_hash(user_in.password)
     db_user = User(
         email=user_in.email,
+        username=desired_username,
         hashed_password=hashed_password,
     )
     db.add(db_user)
@@ -31,7 +37,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     return db_user
 
 @router.post("/login")
-def login(request: Request, response: Response, user_in: UserCreate, db: Session = Depends(get_db)):
+def login(request: Request, response: Response, user_in: UserLogin, db: Session = Depends(get_db)):
     from services.audit import log_audit_event
     user = db.query(User).filter(User.email == user_in.email).first()
     

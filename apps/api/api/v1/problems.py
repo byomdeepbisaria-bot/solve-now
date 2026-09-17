@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
 from pydantic import BaseModel
@@ -25,8 +26,7 @@ class ProblemDraft(BaseModel):
 
 @router.get("/categories")
 def get_categories(db: Session = Depends(get_db)):
-    categories = db.query(Category).all()
-    return [{"id": str(c.id), "name": c.name, "description": c.description} for c in categories]
+ main
 
 @router.post("/similar")
 def find_similar_problems(
@@ -35,15 +35,20 @@ def find_similar_problems(
 ):
     text_to_embed = f"{draft.title}\n{draft.description}"
     emb = generate_embedding(text_to_embed)
-    
-    # Cosine distance: smaller is more similar. Threshold e.g. < 0.2
-    similar_problems = db.query(Problem).filter(
-        Problem.embedding.cosine_distance(emb) < 0.2,
-        Problem.is_public == True
-    ).order_by(Problem.embedding.cosine_distance(emb)).limit(5).all()
-    
-    # Return brief info
-    return [{"public_id": p.public_id, "title": p.title, "status": p.status} for p in similar_problems]
+
+    if not emb:
+        # No AI key — fall back to simple text search
+        problems = db.query(Problem).filter(
+            Problem.is_public == True,
+            Problem.title.ilike(f"%{draft.title[:30]}%")
+        ).limit(5).all()
+    else:
+        problems = db.query(Problem).filter(
+            Problem.embedding.cosine_distance(emb) < 0.2,
+            Problem.is_public == True
+        ).order_by(Problem.embedding.cosine_distance(emb)).limit(5).all()
+
+    return [{"public_id": p.public_id, "title": p.title, "status": p.status} for p in problems]
 
 @router.post("", response_model=ProblemResponse, status_code=status.HTTP_201_CREATED)
 def create_problem(
@@ -128,11 +133,15 @@ def get_problems(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    limit: Optional[int] = Query(None, ge=1, le=100),  # alias for size
     is_public: Optional[bool] = None,
     status: Optional[ProblemStatus] = None,
     category: Optional[str] = None,
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
+    # Allow ?limit= as an alias for ?size= (frontend compatibility)
+    if limit is not None:
+        size = limit
     query = db.query(Problem)
     
     if current_user:
@@ -155,6 +164,9 @@ def get_problems(
     total = query.count()
     items = query.order_by(desc(Problem.created_at)).offset((page - 1) * size).limit(size).all()
     
+    for item in items:
+        item.author_username = item.author.username if item.author else None
+    
     return PaginatedProblems(items=items, total=total, page=page, size=size)
 
 @router.get("/search", response_model=PaginatedProblems)
@@ -166,42 +178,53 @@ def search_problems(
 ):
     if not q.strip():
         return PaginatedProblems(items=[], total=0, page=page, size=size)
-        
+
+    from models.problem import _USE_PGVECTOR
     emb = generate_embedding(q)
-    
-    # Hybrid search
-    vector_str = f"[{','.join(map(str, emb))}]"
-    
-    query = f"""
-        SELECT 
-            p.*,
-            (1.0 - (p.embedding <=> :vector)) as vector_score,
-            ts_rank_cd(to_tsvector('english', p.title || ' ' || p.description), plainto_tsquery('english', :query)) as text_score
-        FROM problems p
-        WHERE p.is_public = True AND p.is_hidden = False
-        ORDER BY (
-            (1.0 - (p.embedding <=> :vector)) * 0.7 + 
-            ts_rank_cd(to_tsvector('english', p.title || ' ' || p.description), plainto_tsquery('english', :query)) * 0.3
-        ) DESC
-        LIMIT :limit OFFSET :offset
-    """
-    
-    results = db.execute(text(query), {"query": q, "vector": vector_str, "limit": size, "offset": (page - 1) * size}).mappings().all()
-    
-    # Needs to match ProblemResponse, we can just fetch the actual objects using the ordered IDs
+    offset = (page - 1) * size
+
+    if _USE_PGVECTOR and emb:
+        # Hybrid vector + full-text search
+        vector_str = f"[{','.join(map(str, emb))}]"
+        query = f"""
+            SELECT p.id,
+                (1.0 - (p.embedding <=> :vector)) * 0.7 +
+                ts_rank_cd(to_tsvector('english', p.title || ' ' || p.description),
+                           plainto_tsquery('english', :query)) * 0.3 AS score
+            FROM problems p
+            WHERE p.is_public = TRUE AND p.is_hidden = FALSE
+            ORDER BY score DESC
+            LIMIT :limit OFFSET :offset
+        """
+        results = db.execute(text(query), {"query": q, "vector": vector_str, "limit": size, "offset": offset}).mappings().all()
+    else:
+        # Full-text only fallback (no pgvector needed)
+        query = """
+            SELECT p.id,
+                ts_rank_cd(to_tsvector('english', p.title || ' ' || p.description),
+                           plainto_tsquery('english', :query)) AS score
+            FROM problems p
+            WHERE p.is_public = TRUE AND p.is_hidden = FALSE
+              AND to_tsvector('english', p.title || ' ' || p.description)
+                  @@ plainto_tsquery('english', :query)
+            ORDER BY score DESC
+            LIMIT :limit OFFSET :offset
+        """
+        results = db.execute(text(query), {"query": q, "limit": size, "offset": offset}).mappings().all()
+
     if not results:
         return PaginatedProblems(items=[], total=0, page=page, size=size)
-        
+
     ids = [r["id"] for r in results]
-    
-    # To keep the exact sorted order
     problems = db.query(Problem).filter(Problem.id.in_(ids)).all()
     problems_sorted = sorted(problems, key=lambda x: ids.index(x.id))
-    
-    # Get total count (not exact for hybrid, but we can do a naive count)
-    total_query = "SELECT count(*) FROM problems WHERE is_public = True AND is_hidden = False"
+
+    total_query = "SELECT count(*) FROM problems WHERE is_public = TRUE AND is_hidden = FALSE"
     total = db.execute(text(total_query)).scalar()
     
+    for p in problems_sorted:
+        p.author_username = p.author.username if p.author else None
+
     return PaginatedProblems(items=problems_sorted, total=total, page=page, size=size)
 
 @router.get("/{public_id}", response_model=ProblemResponse)
@@ -217,6 +240,8 @@ def get_problem(
     if not problem.is_public or problem.is_hidden:
         if not current_user or problem.author_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not enough permissions to view this problem")
+            
+    problem.author_username = problem.author.username if problem.author else None
         
     return problem
 
@@ -291,7 +316,7 @@ def answer_clarification(
         raise HTTPException(status_code=404, detail="Clarification not found")
         
     clarification.answer = answer_in.answer
-    clarification.answered_at = func.now()
+    clarification.answered_at = datetime.now(timezone.utc)
     db.commit()
     
     # Re-trigger AI structuring with new info

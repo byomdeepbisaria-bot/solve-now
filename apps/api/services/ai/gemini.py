@@ -10,7 +10,7 @@ class GeminiProvider(AIProvider):
         if not api_key:
             raise ValueError("Gemini API key is not configured. Please set AI_API_KEY or GEMINI_API_KEY in .env")
         self.client = genai.Client(api_key=api_key)
-        self.model = settings.AI_MODEL or "gemini-2.5-flash"
+        self.model = settings.AI_MODEL or "gemini-2.0-flash"
 
     def generate_chat_response(self, prompt: str, system_prompt: str = "") -> str:
         contents = prompt

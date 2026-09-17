@@ -29,9 +29,13 @@ export function NotificationProvider({ children, user }: { children: React.React
     // Fetch initial list
     api.get('/notifications').then(res => setNotifications(res.data)).catch(console.error)
 
-    // Connect to global WS
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/api/v1/ws/users/${user.id}`
+    // Build WebSocket URL from env — never use window.location.host (that's the Next.js dev server)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const wsBase =
+      process.env.NEXT_PUBLIC_WS_URL ||
+      apiUrl.replace(/^http/, 'ws')  // http → ws, https → wss
+    const token = localStorage.getItem('access_token')
+    const wsUrl = `${wsBase}/api/v1/ws/users/${user.id}${token ? `?token=${token}` : ''}`
     ws.current = new WebSocket(wsUrl)
 
     ws.current.onmessage = (event) => {

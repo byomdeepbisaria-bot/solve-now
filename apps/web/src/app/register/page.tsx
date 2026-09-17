@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 export default function Register() {
   const router = useRouter()
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,17 +22,15 @@ export default function Register() {
     setError('')
     setLoading(true)
     try {
-      await api.post('/auth/register', { email, password })
+      await api.post('/auth/register', { email, username: username || undefined, password })
       // Auto login after register
       const res = await api.post('/auth/login', { email, password })
       if (res.data?.access_token) {
         localStorage.setItem('access_token', res.data.access_token)
       }
-      router.push('/')
-      router.refresh()
+      window.location.href = '/'
     } catch (err: any) {
       setError(err.response?.data?.detail || 'An error occurred during registration')
-    } finally {
       setLoading(false)
     }
   }
@@ -50,13 +49,23 @@ export default function Register() {
               </Alert>
             )}
             <div className="space-y-2">
+              <Label htmlFor="username">Username <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="your_username"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-2">

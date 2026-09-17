@@ -7,7 +7,7 @@ from typing import Type, TypeVar, Any
 T = TypeVar('T', bound=BaseModel)
 
 class BaseAgent:
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
         self.client = genai.Client(api_key=api_key)
         self.model = model
 

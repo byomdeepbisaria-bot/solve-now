@@ -34,14 +34,15 @@ function ExploreContent() {
         const params = new URLSearchParams()
         if (currentCategory) params.append('category', currentCategory)
         if (currentStatus) params.append('status', currentStatus)
-        
+
         if (currentQuery) {
           url = `/problems/search`
           params.append('q', currentQuery)
         }
-        
+
         const res = await api.get(`${url}?${params.toString()}`)
-        setProblems(res.data)
+        // Both /problems and /problems/search return PaginatedProblems {items, total, page, size}
+        setProblems(res.data?.items ?? [])
       } catch (e) {
         console.error(e)
       } finally {
@@ -154,7 +155,6 @@ function ExploreContent() {
                   <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground font-medium">
                     {problem.category && <span className="bg-secondary px-2 py-1 rounded-md">{problem.category.name}</span>}
                     <span>Posted {formatDistanceToNow(new Date(problem.created_at))} ago</span>
-                    <span>By {problem.author}</span>
                   </div>
                 </div>
               </Link>

@@ -49,6 +49,7 @@ export default function ProblemDetail() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState('')
   
   const [newSolution, setNewSolution] = useState('')
   const [editing, setEditing] = useState(false)
@@ -110,22 +111,23 @@ export default function ProblemDetail() {
 
   const handleCreateSolution = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newSolution) return
+    setActionError('')
     try {
       await api.post(`/problems/${publicId}/solutions`, { content: newSolution })
       fetchData()
       setNewSolution('')
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to post solution')
+      setActionError(err.response?.data?.detail || 'Failed to post solution')
     }
   }
 
   const handleAction = async (action: () => Promise<any>) => {
+    setActionError('')
     try {
       await action()
       fetchData()
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Action failed')
+      setActionError(err.response?.data?.detail || 'Action failed')
     }
   }
 
@@ -166,7 +168,7 @@ export default function ProblemDetail() {
           <div className="mt-4 pt-4 border-t flex flex-col gap-2 text-xs text-muted-foreground">
             <div className="flex justify-between"><span>Category</span> <span className="font-medium text-foreground">{problem.category?.name || 'General'}</span></div>
             <div className="flex justify-between"><span>Urgency</span> <span className="font-medium text-foreground capitalize">{problem.urgency}</span></div>
-            <div className="flex justify-between"><span>Author</span> <span className="font-medium text-foreground">{problem.author}</span></div>
+            <div className="flex justify-between"><span>Author</span> <span className="font-medium text-foreground">{problem.author_username ?? problem.author?.username ?? problem.author_id?.slice(0,8) ?? 'Unknown'}</span></div>
           </div>
         </CardContent>
       </Card>
@@ -202,10 +204,18 @@ export default function ProblemDetail() {
 
   const SolutionsPanel = () => (
     <Card className="h-full border-0 shadow-none sm:border sm:shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2"><Lightbulb className="h-5 w-5 text-amber-500" /> Collaborative Solutions</CardTitle>
+      <CardHeader className="pb-3 border-b">
+        <CardTitle className="text-lg flex items-center gap-2 text-primary">
+          <Lightbulb className="h-5 w-5" /> Collaborative Solutions
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="pt-6">
+        {actionError && (
+          <div className="mb-4 p-3 rounded-md bg-destructive/15 text-destructive text-sm font-medium border border-destructive/20">
+            {actionError}
+          </div>
+        )}
+        
         {currentUser && (
           <form onSubmit={handleCreateSolution} className="space-y-3 pb-6 border-b">
             <Label>Propose a Solution</Label>
@@ -220,24 +230,27 @@ export default function ProblemDetail() {
           <EmptyState title="No solutions yet" description="Review the problem summary and AI findings, then propose a solution." />
         ) : (
           <div className="space-y-4">
-            {solutions.map((sol: any) => (
+            {solutions.map((sol: any) => {
+              const isOwnSolution = currentUser?.id === sol.author_id;
+              
+              return (
               <div key={sol.id} className={`flex gap-3 p-4 rounded-xl border ${sol.status === 'ACCEPTED' ? 'border-green-500 bg-green-50/20' : 'bg-card'}`}>
                 <div className="flex flex-col items-center gap-1">
-                  <button onClick={() => handleAction(() => api.post(`/solutions/${sol.id}/vote`, { value: sol.user_vote === 1 ? 0 : 1 }))} className={`p-1 rounded hover:bg-muted ${sol.user_vote === 1 ? 'text-primary' : 'text-muted-foreground'}`}><ArrowUp className="h-4 w-4" /></button>
+                  <button disabled={isOwnSolution} onClick={() => handleAction(() => api.post(`/solutions/${sol.id}/vote`, { value: sol.user_vote === 1 ? 0 : 1 }))} className={`p-1 rounded hover:bg-muted ${isOwnSolution ? 'opacity-50 cursor-not-allowed' : ''} ${sol.user_vote === 1 ? 'text-primary' : 'text-muted-foreground'}`}><ArrowUp className="h-4 w-4" /></button>
                   <span className="text-sm font-bold">{sol.upvotes - sol.downvotes}</span>
-                  <button onClick={() => handleAction(() => api.post(`/solutions/${sol.id}/vote`, { value: sol.user_vote === -1 ? 0 : -1 }))} className={`p-1 rounded hover:bg-muted ${sol.user_vote === -1 ? 'text-destructive' : 'text-muted-foreground'}`}><ArrowDown className="h-4 w-4" /></button>
+                  <button disabled={isOwnSolution} onClick={() => handleAction(() => api.post(`/solutions/${sol.id}/vote`, { value: sol.user_vote === -1 ? 0 : -1 }))} className={`p-1 rounded hover:bg-muted ${isOwnSolution ? 'opacity-50 cursor-not-allowed' : ''} ${sol.user_vote === -1 ? 'text-destructive' : 'text-muted-foreground'}`}><ArrowDown className="h-4 w-4" /></button>
                 </div>
                 <div className="flex-1 space-y-2">
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">{sol.author || 'User'}</span>
+                      <span className="text-sm font-semibold">{sol.author?.username || (typeof sol.author === 'string' ? sol.author : 'User')}</span>
                       <span className="text-xs text-muted-foreground">Â· {formatDistanceToNow(new Date(sol.created_at))} ago</span>
                     </div>
                     {sol.status === 'ACCEPTED' && <span className="flex items-center text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded"><CheckCircle2 className="w-3 h-3 mr-1" /> Accepted</span>}
                   </div>
                   <p className="text-sm whitespace-pre-wrap">{sol.content}</p>
                   <div className="flex items-center gap-2 pt-2">
-                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction(() => api.post(`/solutions/${sol.id}/verify`))}>
+                    <Button disabled={isOwnSolution} variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleAction(() => api.post(`/solutions/${sol.id}/verify`))}>
                       <CheckCircle2 className="w-3 h-3 mr-1" /> Verify ({sol.verification_count})
                     </Button>
                     {isAuthor && problem.status !== 'SOLVED' && (
@@ -246,7 +259,7 @@ export default function ProblemDetail() {
                   </div>
                 </div>
               </div>
-            ))}
+            );})}
           </div>
         )}
       </CardContent>
@@ -419,15 +432,13 @@ export default function ProblemDetail() {
               <TabsList className="w-full justify-start sm:justify-center grid grid-cols-4 min-w-[320px]">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="solutions">Solutions</TabsTrigger>
-                <TabsTrigger value="ai">AI Panel</TabsTrigger>
                 <TabsTrigger value="chat">Chat</TabsTrigger>
               </TabsList>
             </div>
             <div className="px-4">
               <TabsContent value="overview" className="mt-0"><OverviewPanel /></TabsContent>
               <TabsContent value="solutions" className="mt-0"><SolutionsPanel /></TabsContent>
-              <TabsContent value="ai" className="mt-0"><AIPanel /></TabsContent>
-              <TabsContent value="chat" className="mt-0"><RoomChat publicId={publicId} currentUser={currentUser} /></TabsContent>
+              <TabsContent value="chat" className="mt-0"><RoomChat publicId={publicId} currentUser={currentUser} aiPanel={<AIPanel />} /></TabsContent>
             </div>
           </Tabs>
         </div>
@@ -443,9 +454,8 @@ export default function ProblemDetail() {
           </div>
           
           <div className="col-span-1 space-y-6 sticky top-24">
-            <AIPanel />
-            <div className="h-[400px]">
-              <RoomChat publicId={publicId} currentUser={currentUser} />
+            <div className="h-[600px]">
+              <RoomChat publicId={publicId} currentUser={currentUser} aiPanel={<AIPanel />} />
             </div>
           </div>
         </div>

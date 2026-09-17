@@ -21,18 +21,21 @@ logger = logging.getLogger(__name__)
 def get_solution_with_stats(db: Session, solution: Solution, current_user_id: uuid.UUID = None) -> SolutionResponse:
     """
     Returns solution with aggregated vote/verification stats.
-    Uses a SINGLE query per solution (not 4 separate COUNTs).
+    Uses separate scalar queries to avoid table-name duplication errors in multi-join.
     """
-    # Aggregate all counts in one query
-    stats = db.query(
-        func.sum(case((SolutionVote.value == 1, 1), else_=0)).label("upvotes"),
-        func.sum(case((SolutionVote.value == -1, 1), else_=0)).label("downvotes"),
-        func.count(SolutionVerification.id.distinct()).label("verifications"),
-    ).outerjoin(
-        SolutionVote, SolutionVote.solution_id == solution.id
-    ).outerjoin(
-        SolutionVerification, SolutionVerification.solution_id == solution.id
-    ).filter(SolutionVote.solution_id == solution.id).first()
+    upvotes = db.query(func.count(SolutionVote.id)).filter(
+        SolutionVote.solution_id == solution.id,
+        SolutionVote.value == 1
+    ).scalar() or 0
+
+    downvotes = db.query(func.count(SolutionVote.id)).filter(
+        SolutionVote.solution_id == solution.id,
+        SolutionVote.value == -1
+    ).scalar() or 0
+
+    verifications = db.query(func.count(SolutionVerification.id)).filter(
+        SolutionVerification.solution_id == solution.id
+    ).scalar() or 0
 
     user_vote = 0
     if current_user_id:
@@ -44,9 +47,9 @@ def get_solution_with_stats(db: Session, solution: Solution, current_user_id: uu
             user_vote = vote
 
     resp = SolutionResponse.model_validate(solution)
-    resp.upvotes = int(stats.upvotes or 0)
-    resp.downvotes = int(stats.downvotes or 0)
-    resp.verification_count = int(stats.verifications or 0)
+    resp.upvotes = int(upvotes)
+    resp.downvotes = int(downvotes)
+    resp.verification_count = int(verifications)
     resp.user_vote = user_vote
     return resp
 
@@ -97,29 +100,7 @@ def get_solutions(
     problem = db.query(Problem).filter(Problem.public_id == public_id).first()
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
-        
-    solutions = db.query(Solution).filter(
-        Solution.problem_id == problem.id,
-        Solution.is_hidden == False
-    ).order_by(
-        desc(Solution.created_at)
-    ).all()
-    
-    # Calculate votes and verifications for response
-    for sol in solutions:
-        sol.user_vote = 0
-        sol.upvotes = sum(1 for v in sol.votes if v.value == 1)
-        sol.downvotes = sum(1 for v in sol.votes if v.value == -1)
-        sol.verification_count = len(sol.verifications)
-        if current_user:
-            vote = next((v for v in sol.votes if v.user_id == current_user.id), None)
-            if vote:
-                sol.user_vote = vote.value
-                
-    # Sort in memory by net votes (upvotes - downvotes)
-    solutions.sort(key=lambda s: (s.upvotes - s.downvotes), reverse=True)
-                
-    return solutions
+main
 
 @router.post("/solutions/{solution_id}/vote")
 def vote_solution(

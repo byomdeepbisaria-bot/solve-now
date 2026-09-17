@@ -54,6 +54,49 @@ class ExpertProfileResponse(BaseModel):
     class Config:
         from_attributes = True
 
+@router.get("/search", response_model=List[ExpertProfileResponse])
+def search_experts(
+    q: Optional[str] = None,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+):
+    """
+    List verified, available experts — optionally filtered by username or bio.
+    Used by the homepage feed and expert discovery UI.
+    """
+    query = (
+        db.query(ExpertProfile, User)
+        .join(User, ExpertProfile.user_id == User.id)
+        .filter(
+            ExpertProfile.status == ExpertStatus.VERIFIED,
+            ExpertProfile.is_available == True,
+        )
+    )
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            (func.lower(User.username).contains(q.lower()))
+            | (func.lower(ExpertProfile.bio).contains(q.lower()))
+        )
+    results = query.order_by(desc(User.reputation_score)).limit(limit).all()
+
+    return [
+        ExpertProfileResponse(
+            id=profile.id,
+            user_id=user.id,
+            username=user.username,
+            status=profile.status,
+            verification_level=profile.verification_level,
+            bio=profile.bio,
+            timezone=profile.timezone,
+            is_available=profile.is_available,
+            years_experience=profile.years_experience,
+            reputation_score=user.reputation_score,
+        )
+        for profile, user in results
+    ]
+
+
 @router.post("/apply")
 def apply_for_expert(
     req: ExpertApplyRequest,
@@ -148,16 +191,17 @@ def request_expert(
         message=req.message
     )
     db.add(expert_req)
-    
-    # Notify Expert (without leaking private problem contents)
+
+    # Notify Expert
     notification = Notification(
         user_id=req.expert_id,
+        type="EXPERT_REQUEST",
         title="New Expert Request",
-        message=f"{current_user.username} has requested your expertise for a problem.",
-        action_url=f"/experts/requests"
+        body=f"{current_user.username} has requested your expertise for a problem.",
+        action_url="/experts/requests"
     )
     db.add(notification)
-    
+
     db.commit()
     return {"message": "Request sent"}
 
@@ -188,8 +232,9 @@ def accept_request(
     # Notify Requester
     notification = Notification(
         user_id=expert_req.requester_id,
+        type="EXPERT_ACCEPTED",
         title="Expert Accepted",
-        message=f"{current_user.username} accepted your request! A private room has been created.",
+        body=f"{current_user.username} accepted your request! A private room has been created.",
         action_url=f"/problems/{expert_req.problem.public_id}/room"
     )
     db.add(notification)
@@ -212,12 +257,13 @@ def admin_verify_expert(
         raise HTTPException(status_code=404, detail="Profile not found")
         
     profile.status = status
-    
+
     # Notify user
     notification = Notification(
         user_id=user_id,
+        type="STATUS_UPDATE",
         title="Expert Status Updated",
-        message=f"Your expert application status is now: {status.value}",
+        body=f"Your expert application status is now: {status.value}",
     )
     db.add(notification)
     db.commit()

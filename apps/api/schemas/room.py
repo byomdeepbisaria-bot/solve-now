@@ -9,6 +9,8 @@ class MessageResponse(MessageBase):
     id: uuid.UUID
     room_id: uuid.UUID
     author_id: uuid.UUID
+    author_email: str | None = None
+    author_username: str | None = None
     created_at: datetime
     
     class Config:

@@ -19,7 +19,7 @@ export function ExpertRequestBox({ problemId, isAuthor }: { problemId: string, i
   const handleRequest = async (expertId: string) => {
     setLoading(true)
     try {
-      await api.post(`/problems/${problemId}/request-expert`, {
+      await api.post(`/experts/problems/${problemId}/request-expert`, {
         expert_id: expertId,
         message
       })
