@@ -44,8 +44,12 @@ class Settings(BaseSettings):
 
     # --- AI Provider ---
     AI_PROVIDER: str = "gemini"
-    AI_MODEL: str = "gemini-2.0-flash"
+    AI_MODEL: str = "gemini-3.7-flash"
     AI_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.7-flash"
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
 
     # --- Monitoring ---
     SENTRY_DSN: Optional[str] = None

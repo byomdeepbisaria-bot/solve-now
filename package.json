@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "concurrently --kill-others-on-fail --names \"REDIS,API,WEB\" --prefix-colors \"magenta,yellow,cyan\" \"npm run dev:redis\" \"npm run dev:api\" \"npm run dev:web\"",
-    "dev:redis": "powershell -Command \"$r = 'C:\\Redis\\Redis-8.10.1-Windows-x64-msys2'; if (& $r/redis-cli.exe ping 2>$null) { Write-Host '[REDIS] Already running, skipping start.'; while($true){Start-Sleep 60} } else { & $r/redis-server.exe }\"",
-    "dev:api": "powershell -Command \"Set-Location apps/api; e:\\byom\\.venv\\Scripts\\uvicorn.exe main:app --reload --host 0.0.0.0 --port 8000\"",
+    "dev:redis": "powershell -Command \"$r = 'C:\\Redis'; $ping = & $r/redis-cli.exe -p 6380 ping; if ($ping -match 'PONG') { Write-Host '[REDIS] Already running, skipping start.'; while($true){Start-Sleep 60} } else { & $r/redis-server.exe --port 6380 }\"",
+    "dev:api": "powershell -Command \"Set-Location apps/api; ..\\..\\.venv\\Scripts\\uvicorn.exe main:app --reload --host 0.0.0.0 --port 8000\"",
     "dev:web": "npm run dev --prefix apps/web"
   },
   "devDependencies": {

@@ -16,18 +16,7 @@ from api.deps import get_current_user
 
 router = APIRouter()
 
-@router.get("/search")
-def search_experts(limit: int = 4, db: Session = Depends(get_db)):
-    # Simple placeholder returning top reputation users
-    users = db.query(User).order_by(User.reputation_score.desc()).limit(limit).all()
-    return [{
-        "user_id": str(u.id), 
-        "username": u.email.split('@')[0] if u.email else "Anonymous", 
-        "reputation": u.reputation_score,
-        "success_rate": 95, # Dummy placeholder
-        "avatar": None,
-        "expertise": ["Debugging", "System Design"]
-    } for u in users]
+
 
 class ExpertApplyRequest(BaseModel):
     bio: str

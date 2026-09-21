@@ -100,7 +100,8 @@ def get_solutions(
     problem = db.query(Problem).filter(Problem.public_id == public_id).first()
     if not problem:
         raise HTTPException(status_code=404, detail="Problem not found")
-main
+    solutions = db.query(Solution).filter(Solution.problem_id == problem.id).all()
+    return [get_solution_with_stats(db, sol, current_user.id if current_user else None) for sol in solutions]
 
 @router.post("/solutions/{solution_id}/vote")
 def vote_solution(

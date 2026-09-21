@@ -116,8 +116,13 @@ if not settings.is_production:
 if settings.NEXT_PUBLIC_APP_URL and settings.NEXT_PUBLIC_APP_URL not in _cors_origins:
     _cors_origins.append(settings.NEXT_PUBLIC_APP_URL)
 
- main
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Body size limit middleware
 class LimitUploadSize(BaseHTTPMiddleware):
     def __init__(self, app, max_upload_size: int = 10 * 1024 * 1024): # 10MB
