@@ -2,7 +2,6 @@ from fastapi import FastAPI, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette_prometheus import metrics as prometheus_metrics, PrometheusMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -188,7 +187,6 @@ def readiness_check(db: Session = Depends(get_db)):
         return JSONResponse(status_code=503, content={"status": "unavailable", "database": "disconnected"})
 
 # Expose Prometheus metrics at /metrics (restrict via nginx/Cloudflare to internal only)
-app.add_route("/metrics", prometheus_metrics)
 
 from api.v1 import auth, problems, solutions, rooms, ws, files, knowledge, users, experts, notifications, moderation, admin, ai
 
