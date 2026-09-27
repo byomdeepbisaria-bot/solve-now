@@ -64,8 +64,7 @@ Cloudflare Rate Limiting (under **Security → WAF → Rate Limiting Rules**):
 | Auth brute-force       | `http.request.uri.path contains "/auth/login"` | 10 req | 60s | Block 10min |
 | API global             | `http.request.uri.path starts_with "/api/v1"` | 100 req | 60s | Challenge |
 
-> Note: This supplements the `slowapi` rate limiting in the application layer.
-
+> Note: Cloudflare provides the first-line rate limiting at the edge; application-level SlowAPI rate limiting is not currently enabled.`r`n
 ---
 
 ## Caching Rules

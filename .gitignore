@@ -41,3 +41,4 @@ Desktop.ini
 # Project specific
 logs/
 *.log
+.env*
