@@ -8,10 +8,10 @@ redis_client = None
 
 async def init_redis():
     global redis_client
-    redis_client = redis.Redis(
-        host=settings.REDIS_HOST,
-        port=settings.REDIS_PORT,
-        decode_responses=True
+    redis_client = redis.Redis.from_url(
+        settings.REDIS_CONNECTION_URL,
+        decode_responses=True,
+        ssl_cert_reqs="none" if settings.REDIS_CONNECTION_URL.startswith("rediss://") else None
     )
     # Test connection
     await redis_client.ping()

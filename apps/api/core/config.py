@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     # --- Frontend ---
     NEXT_PUBLIC_API_URL: Optional[str] = None
     NEXT_PUBLIC_APP_URL: Optional[str] = None
+    CORS_ORIGINS: Optional[str] = None
 
     # --- AI Provider ---
     AI_PROVIDER: str = "gemini"

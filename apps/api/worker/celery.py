@@ -6,8 +6,8 @@ os.environ.setdefault("ENVIRONMENT", "production")
 
 celery_app = Celery(
     "solvenow_worker",
-    broker=settings.CELERY_BROKER_URL or "redis://redis:6379/1",
-    backend=settings.CELERY_RESULT_BACKEND or "redis://redis:6379/2",
+    broker=settings.CELERY_BROKER_URL or settings.REDIS_CONNECTION_URL,
+    backend=settings.CELERY_RESULT_BACKEND or settings.REDIS_CONNECTION_URL,
     include=["worker.tasks"]
 )
 

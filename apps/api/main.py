@@ -88,26 +88,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
-# Strict CORS â€” fails closed in production if NEXT_PUBLIC_API_URL is not set
-if settings.is_production and not settings.NEXT_PUBLIC_API_URL:
+# Strict CORS handling using CORS_ORIGINS
+if settings.is_production and not settings.CORS_ORIGINS:
     raise ValueError(
-        "NEXT_PUBLIC_API_URL must be set in production. "
+        "CORS_ORIGINS must be set in production. "
         "CORS cannot default to localhost in a production environment."
     )
 
-_cors_origins = (
-    [settings.NEXT_PUBLIC_API_URL]
-    if settings.NEXT_PUBLIC_API_URL
-    else ["http://localhost:3000", "http://127.0.0.1:3000"]
-)
-if not settings.is_production:
-    if "http://localhost:3000" not in _cors_origins:
-        _cors_origins.append("http://localhost:3000")
-    if "http://127.0.0.1:3000" not in _cors_origins:
-        _cors_origins.append("http://127.0.0.1:3000")
-# Allow both API URL and APP URL if they differ (e.g. api.example.com serving app.example.com)
-if settings.NEXT_PUBLIC_APP_URL and settings.NEXT_PUBLIC_APP_URL not in _cors_origins:
-    _cors_origins.append(settings.NEXT_PUBLIC_APP_URL)
+_cors_origins = []
+if settings.CORS_ORIGINS:
+    _cors_origins = [origin.strip().rstrip("/") for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+
+if not settings.is_production and not _cors_origins:
+    _cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 app.add_middleware(
     CORSMiddleware,

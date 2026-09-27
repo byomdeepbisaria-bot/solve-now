@@ -18,6 +18,7 @@ engine = create_engine(
     pool_recycle=3600,
     # Echo SQL only in non-production environments
     echo=not settings.is_production,
+    connect_args={"ssl_context": __import__("ssl").create_default_context()} if settings.is_production else {},
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

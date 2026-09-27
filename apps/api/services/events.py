@@ -3,7 +3,7 @@ import redis
 from core.config import settings
 
 try:
-    redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+    redis_client = redis.Redis.from_url(settings.REDIS_CONNECTION_URL, decode_responses=True)
 except Exception:
     redis_client = None
 
