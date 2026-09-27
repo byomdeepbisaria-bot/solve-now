@@ -108,7 +108,10 @@ async def upload_file(
     extension = ALLOWED_MIME_TYPES.get(mime_type, ".bin")
     storage_key = f"uploads/{uuid.uuid4()}{extension}"
     await file.seek(0)
-    await storage.upload(file, storage_key)
+    try:
+        await storage.upload(file, storage_key)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
     # 4. Persist metadata
     db_file = ProblemFile(
