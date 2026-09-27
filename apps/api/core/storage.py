@@ -1,6 +1,7 @@
 import os
+import uuid
 import logging
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from fastapi import UploadFile
 
 logger = logging.getLogger(__name__)
@@ -11,15 +12,8 @@ class S3StorageProvider:
     Production S3-compatible object storage provider.
     Works with AWS S3, Cloudflare R2, MinIO, and DigitalOcean Spaces.
 
-    Initialization never raises — the provider detects configuration at
-    startup and logs warnings. File operations raise a clear RuntimeError
-    if called without S3 credentials in production, so the application
-    can start and serve non-file routes while the storage error is surfaced
-    only on actual upload/download/delete calls.
-
-    S3 credentials (S3_ACCESS_KEY_ID + S3_SECRET_ACCESS_KEY) are REQUIRED
-    for file upload functionality in production. Without them, file-related
-    endpoints return 503. All other API endpoints are unaffected.
+    Falls back to local filesystem only when S3_ENDPOINT_URL is not configured
+    (development only). In production, missing config raises ValueError on startup.
     """
 
     def __init__(self):
@@ -34,34 +28,20 @@ class S3StorageProvider:
         if self.access_key and self.secret_key:
             self._init_s3()
             self.use_s3 = True
-            logger.info(
-                f"Storage: S3-compatible backend ({self.endpoint_url or 'AWS'}), "
-                f"bucket={self.bucket}"
-            )
+            logger.info(f"Storage: S3-compatible backend ({self.endpoint_url or 'AWS'}), bucket={self.bucket}")
         elif self.environment == "production":
-            # Do NOT raise here — defer the error to first file operation.
-            # This allows the application to start and serve all non-file routes.
-            self.use_s3 = False
-            self._unconfigured_production = True
-            logger.warning(
-                "Storage: S3 credentials not set. File upload/download endpoints "
-                "will return 503 until S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY "
-                "are configured. Set these in your Render environment variables."
+            raise ValueError(
+                "S3 storage credentials are required in production. "
+                "Set S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY environment variables."
             )
         else:
-            # Development: local filesystem fallback
             self.use_s3 = False
-            self._unconfigured_production = False
             self.local_base = "storage"
             os.makedirs(self.local_base, exist_ok=True)
-            logger.warning(
-                "Storage: Using LOCAL FILESYSTEM — for development only. "
-                "Do not use in production."
-            )
+            logger.warning("Storage: Using LOCAL FILESYSTEM — for development only. Do not use in production.")
 
     def _init_s3(self):
         import boto3
-        self._unconfigured_production = False
         kwargs = {
             "aws_access_key_id": self.access_key,
             "aws_secret_access_key": self.secret_key,
@@ -69,23 +49,15 @@ class S3StorageProvider:
         }
         if self.endpoint_url:
             kwargs["endpoint_url"] = self.endpoint_url
-        self._s3 = boto3.client("s3", **kwargs)
 
-    def _require_storage(self):
-        """Raise a clear error if called without storage configured in production."""
-        if getattr(self, "_unconfigured_production", False):
-            raise RuntimeError(
-                "File storage is not configured. "
-                "Set S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY in your "
-                "Render environment variables to enable file upload/download."
-            )
+        self._s3 = boto3.client("s3", **kwargs)
 
     async def upload(self, file: UploadFile, storage_key: str) -> str:
         """Upload a file to storage. Returns the storage key."""
-        self._require_storage()
         await file.seek(0)
 
         if self.use_s3:
+            import io
             content = await file.read()
             self._s3.put_object(
                 Bucket=self.bucket,
@@ -111,7 +83,6 @@ class S3StorageProvider:
         Generate a time-limited signed URL for private access.
         In local dev, returns a direct API download URL.
         """
-        self._require_storage()
         if self.use_s3:
             url = self._s3.generate_presigned_url(
                 "get_object",
@@ -125,12 +96,9 @@ class S3StorageProvider:
 
     async def get_stream(self, storage_key: str) -> AsyncGenerator[bytes, None]:
         """Stream file content. Used for local dev fallback only."""
-        self._require_storage()
         if self.use_s3:
             # In S3 mode, use presigned URLs — streaming is done client-side
-            raise RuntimeError(
-                "Use get_presigned_url() for S3-backed storage, not get_stream()"
-            )
+            raise RuntimeError("Use get_presigned_url() for S3-backed storage, not get_stream()")
 
         import aiofiles
         path = os.path.join(self.local_base, storage_key)
@@ -143,7 +111,6 @@ class S3StorageProvider:
 
     def delete(self, storage_key: str) -> None:
         """Delete a file from storage."""
-        self._require_storage()
         if self.use_s3:
             self._s3.delete_object(Bucket=self.bucket, Key=storage_key)
             logger.info(f"Deleted {storage_key} from S3 bucket {self.bucket}")
@@ -154,8 +121,6 @@ class S3StorageProvider:
 
     def object_exists(self, storage_key: str) -> bool:
         """Check if an object exists in storage."""
-        if getattr(self, "_unconfigured_production", False):
-            return False
         if self.use_s3:
             try:
                 self._s3.head_object(Bucket=self.bucket, Key=storage_key)
@@ -166,7 +131,5 @@ class S3StorageProvider:
             return os.path.exists(os.path.join(self.local_base, storage_key))
 
 
-# Singleton — initialized once at startup.
-# Never raises during import. File operations will raise RuntimeError
-# if S3 is not configured in production.
+# Singleton — initialized once at startup
 storage = S3StorageProvider()
