@@ -51,6 +51,20 @@ async def lifespan(app: FastAPI):
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("Database connection established.")
+
+        # Run database migrations automatically on startup
+        try:
+            from alembic.config import Config
+            from alembic import command
+            alembic_ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
+            if os.path.exists(alembic_ini_path):
+                alembic_cfg = Config(alembic_ini_path)
+                command.upgrade(alembic_cfg, "head")
+                logger.info("Database migrations applied successfully.")
+            else:
+                logger.warning(f"alembic.ini not found at {alembic_ini_path}")
+        except Exception as me:
+            logger.error(f"Failed to apply database migrations on startup: {me}")
     except Exception as e:
         logger.error(f"Failed to connect to database: {e}")
 
