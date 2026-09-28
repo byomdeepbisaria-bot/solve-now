@@ -51,22 +51,6 @@ async def lifespan(app: FastAPI):
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("Database connection established.")
-
-        # Run database migrations automatically on startup
-        try:
-            from alembic.config import Config
-            from alembic import command
-            alembic_ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
-            if os.path.exists(alembic_ini_path):
-                alembic_cfg = Config(alembic_ini_path)
-                script_dir = os.path.join(os.path.dirname(__file__), "migrations")
-                alembic_cfg.set_main_option("script_location", script_dir)
-                command.upgrade(alembic_cfg, "head")
-                logger.info("Database migrations applied successfully.")
-            else:
-                logger.warning(f"alembic.ini not found at {alembic_ini_path}")
-        except Exception as me:
-            logger.error(f"Failed to apply database migrations on startup: {me}")
     except Exception as e:
         logger.error(f"Failed to connect to database: {e}")
 
@@ -184,18 +168,7 @@ def readiness_check(db: Session = Depends(get_db)):
     """Readiness probe â€” checks database connectivity before accepting traffic."""
     try:
         db.execute(text("SELECT 1"))
-        tbl_check = db.execute(text("SELECT to_regclass('public.users')")).scalar()
-        ver_check = None
-        try:
-            ver_check = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-        except Exception:
-            pass
-        return {
-            "status": "ok" if tbl_check else "degraded",
-            "database": "connected",
-            "users_table": str(tbl_check),
-            "alembic_version": str(ver_check),
-        }
+        return {"status": "ok", "database": "connected"}
     except Exception as e:
         logger.error(f"Readiness check failed: {e}")
         return JSONResponse(status_code=503, content={"status": "unavailable", "database": "disconnected"})

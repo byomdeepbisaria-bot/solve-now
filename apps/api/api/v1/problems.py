@@ -26,8 +26,7 @@ class ProblemDraft(BaseModel):
 
 @router.get("/categories")
 def get_categories(db: Session = Depends(get_db)):
-    categories = db.query(Category).all()
-    return [{"id": str(c.id), "name": c.name} for c in categories]
+ main
 
 @router.post("/similar")
 def find_similar_problems(

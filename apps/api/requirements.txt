@@ -24,4 +24,3 @@ aiofiles>=23.2.0
 pypdf>=4.0.0
 python-magic>=0.4.27
 email-validator>=2.0.0
-argon2-cffi>=23.1.0
