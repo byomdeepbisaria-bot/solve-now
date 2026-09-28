@@ -22,10 +22,10 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: uuid.UUID
     username: Optional[str] = None
-    is_active: bool = True
-    is_verified: bool = False
+    is_active: bool
+    is_verified: bool
     role: Optional[str] = None  # Serialized as role name string e.g. "ADMIN"
-    created_at: Optional[datetime] = None
+    created_at: datetime
 
     @field_validator("role", mode="before")
     @classmethod
@@ -45,28 +45,3 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
-
-
-class VerifyEmailOTP(BaseModel):
-    email: EmailStr
-    otp: str
-
-
-class ResendOTPRequest(BaseModel):
-    email: EmailStr
-    purpose: str = "email_verification"
-
-
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
-
-class VerifyResetOTPRequest(BaseModel):
-    email: EmailStr
-    otp: str
-
-
-class ResetPasswordRequest(BaseModel):
-    reset_token: str
-    new_password: str
-

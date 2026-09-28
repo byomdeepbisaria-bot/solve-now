@@ -9,6 +9,5 @@ from .expert import ExpertProfile, ExpertRequest, ExpertStatus, RequestStatus
 from .notification import Notification
 from .moderation import Report, ContentFlag, ModerationAction, UserRestriction
 from .security import TokenDenylist, AuditLog
-from .auth_otp import AuthOTP
 from core.database import Base
 

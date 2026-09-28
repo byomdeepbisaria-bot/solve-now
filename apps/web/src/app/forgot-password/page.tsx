@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,16 +12,16 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export default function ForgotPassword() {
   const router = useRouter()
-  const [step, setStep] = useState<'request' | 'otp' | 'new_password'>('request')
+  const [step, setStep] = useState<'email' | 'otp' | 'new_password'>('email')
 
-  // Form states
+  // Form inputs
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [resetToken, setResetToken] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
-  // UI states
+  // UI state
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -34,7 +35,7 @@ export default function ForgotPassword() {
     return () => clearInterval(timer)
   }, [cooldown])
 
-  // Step 1: Request Password Reset OTP
+  // Step 1: Send reset OTP
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -43,17 +44,17 @@ export default function ForgotPassword() {
 
     try {
       await api.post('/auth/forgot-password', { email })
-      setSuccessMsg('If an account exists for this email, we have sent a 6-digit reset code.')
+      setSuccessMsg('If an account exists with this email, a 6-digit reset code has been sent.')
       setStep('otp')
       setCooldown(60)
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'An error occurred. Please try again.')
+      setError(err.response?.data?.detail || 'Failed to send reset code. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  // Step 2: Verify 6-digit OTP
+  // Step 2: Verify reset OTP
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -67,28 +68,28 @@ export default function ForgotPassword() {
         setSuccessMsg('Code verified! Please enter your new password.')
         setStep('new_password')
       } else {
-        setError('Invalid authorization token received.')
+        setError('Invalid server response during code verification.')
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Invalid or expired reset code.')
+      setError(err.response?.data?.detail || 'Invalid or expired 6-digit reset code.')
     } finally {
       setLoading(false)
     }
   }
 
-  // Step 3: Set New Password
+  // Step 3: Set new password
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setSuccessMsg('')
 
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.')
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters long.')
       return
     }
 
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters long.')
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.')
       return
     }
 
@@ -105,11 +106,11 @@ export default function ForgotPassword() {
       }, 1500)
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to reset password. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
 
+  // Resend code handler
   const handleResendOtp = async () => {
     if (cooldown > 0) return
     setError('')
@@ -128,9 +129,9 @@ export default function ForgotPassword() {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl text-center">
-            {step === 'request' && 'Forgot Password'}
-            {step === 'otp' && 'Enter Reset Code'}
-            {step === 'new_password' && 'Set New Password'}
+            {step === 'email' && 'Forgot Password'}
+            {step === 'otp' && 'Enter Verification Code'}
+            {step === 'new_password' && 'Reset Password'}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -146,13 +147,10 @@ export default function ForgotPassword() {
             </Alert>
           )}
 
-          {step === 'request' && (
+          {step === 'email' && (
             <form onSubmit={handleRequestOtp} className="space-y-4">
-              <p className="text-sm text-muted-foreground text-center mb-2">
-                Enter your account email address and we will send you a 6-digit password reset code.
-              </p>
               <div className="space-y-2">
-                <Label htmlFor="email">Account Email</Label>
+                <Label htmlFor="email">Email Address</Label>
                 <Input
                   id="email"
                   type="email"
@@ -170,11 +168,8 @@ export default function ForgotPassword() {
 
           {step === 'otp' && (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <p className="text-sm text-muted-foreground text-center mb-2">
-                We sent a 6-digit reset code to <strong className="text-foreground">{email}</strong>
-              </p>
               <div className="space-y-2">
-                <Label htmlFor="otp">6-Digit Reset Code</Label>
+                <Label htmlFor="otp">6-Digit Code</Label>
                 <Input
                   id="otp"
                   type="text"
@@ -182,25 +177,25 @@ export default function ForgotPassword() {
                   value={otp}
                   onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   placeholder="123456"
-                  className="text-center text-lg tracking-widest font-mono"
+                  className="text-center text-2xl letter-spacing-2"
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading || otp.length !== 6}>
-                {loading ? 'Verifying Code...' : 'Verify Code'}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Verifying...' : 'Verify Code'}
               </Button>
 
-              <div className="pt-2 text-center">
-                <Button
+              <div className="text-center pt-2">
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
                   onClick={handleResendOtp}
                   disabled={cooldown > 0}
-                  className="text-xs text-muted-foreground"
+                  className="text-xs text-primary hover:underline disabled:opacity-50 disabled:no-underline"
                 >
-                  {cooldown > 0 ? `Resend code in ${cooldown}s` : "Didn't receive a code? Resend"}
-                </Button>
+                  {cooldown > 0
+                    ? `Resend code in ${cooldown}s`
+                    : "Didn't get a code? Resend"}
+                </button>
               </div>
             </form>
           )}
@@ -235,13 +230,10 @@ export default function ForgotPassword() {
             </form>
           )}
         </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            Remember your password?{' '}
-            <a href="/login" className="text-primary hover:underline">
-              Back to Login
-            </a>
-          </p>
+        <CardFooter className="justify-center border-t pt-4">
+          <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground">
+            Back to Login
+          </Link>
         </CardFooter>
       </Card>
     </div>

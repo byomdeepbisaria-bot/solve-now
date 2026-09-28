@@ -26,10 +26,6 @@ def _get_gmail_access_token() -> Optional[str]:
     if not (client_id and client_secret and refresh_token):
         return None
 
-    client_id = str(client_id).strip().strip("'\"")
-    client_secret = str(client_secret).strip().strip("'\"")
-    refresh_token = str(refresh_token).strip().strip("'\"")
-
     url = "https://oauth2.googleapis.com/token"
     data = urllib.parse.urlencode({
         "client_id": client_id,
@@ -62,7 +58,6 @@ def _send_email_via_gmail_api(to_email: str, subject: str, html_content: str) ->
         or getattr(settings, "GMAIL_SENDER_EMAIL", None)
         or "noreply@solvenow.app"
     )
-    sender_email = str(sender_email).strip().strip("'\"")
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
