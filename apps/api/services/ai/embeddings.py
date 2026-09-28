@@ -31,15 +31,16 @@ def _get_api_key() -> str:
 def generate_embedding(text: str) -> list[float] | None:
     """
     Generates a 768-dimensional embedding using Gemini's text-embedding-004 model.
-
-    Returns None in development when no API key is configured.
-    Raises ValueError in production if no API key is set.
+    Returns None if no API key is configured or if embedding fails.
     """
-    api_key = _get_api_key()
+    try:
+        api_key = _get_api_key()
+    except ValueError as ve:
+        logger.warning(f"AI_API_KEY missing: {ve}. Falling back to text-only processing.")
+        return None
 
     if not api_key:
-        # Development-only degraded mode — store NULL instead of zero vector
-        logger.warning("Skipping embedding generation (no API key configured) — storing NULL")
+        logger.warning("Skipping embedding generation (no API key configured)")
         return None
 
     try:
@@ -51,7 +52,4 @@ def generate_embedding(text: str) -> list[float] | None:
         return result.embeddings[0].values
     except Exception as e:
         logger.error(f"Embedding generation failed: {e}")
-        if os.environ.get("ENVIRONMENT") == "production":
-            raise
-        # Development fallback — log and return None
         return None
