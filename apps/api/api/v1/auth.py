@@ -82,17 +82,21 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         db.add(otp_record)
         db.commit()
 
-        # Send verification email via Gmail API / SMTP
-        send_verification_otp(db_user.email, raw_otp)
+        # Send verification email via Gmail API / SMTP (best-effort, non-blocking)
+        try:
+            send_verification_otp(db_user.email, raw_otp)
+        except Exception as mail_err:
+            logger.error("Failed to send verification email: %s", mail_err)
 
         return db_user
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         logger.exception("Error in user registration: %s", e)
         raise HTTPException(
             status_code=500,
-            detail="Registration failed due to a server error. Please try again later.",
+            detail=f"Registration error: {e}",
         )
 
 
@@ -202,10 +206,13 @@ def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
     db.add(new_otp)
     db.commit()
 
-    if purpose == "email_verification":
-        send_verification_otp(user.email, raw_otp)
-    else:
-        send_password_reset_otp(user.email, raw_otp)
+    try:
+        if purpose == "email_verification":
+            send_verification_otp(user.email, raw_otp)
+        else:
+            send_password_reset_otp(user.email, raw_otp)
+    except Exception as mail_err:
+        logger.error("Failed to send OTP email: %s", mail_err)
 
     return {
         "message": "If an account exists for this email, a verification code has been sent."
@@ -255,7 +262,10 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     db.add(new_otp)
     db.commit()
 
-    send_password_reset_otp(user.email, raw_otp)
+    try:
+        send_password_reset_otp(user.email, raw_otp)
+    except Exception as mail_err:
+        logger.error("Failed to send password reset email: %s", mail_err)
 
     return generic_msg
 
