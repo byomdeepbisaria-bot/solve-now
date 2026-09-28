@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ from schemas.user import (
 )
 from api.deps import get_current_user, get_token_from_cookie
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -36,50 +38,59 @@ def _ensure_tz(dt: datetime) -> datetime:
 
 @router.post("/register", response_model=UserResponse)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == user_in.email).first():
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this email already exists in the system.",
+    try:
+        if db.query(User).filter(User.email == user_in.email).first():
+            raise HTTPException(
+                status_code=400,
+                detail="The user with this email already exists in the system.",
+            )
+
+        # Derive username from input or fall back to email prefix
+        desired_username = user_in.username or user_in.email.split("@")[0]
+        base = desired_username
+        suffix = 1
+        while db.query(User).filter(User.username == desired_username).first():
+            desired_username = f"{base}{suffix}"
+            suffix += 1
+
+        hashed_password = get_password_hash(user_in.password)
+        db_user = User(
+            email=user_in.email,
+            username=desired_username,
+            hashed_password=hashed_password,
+            is_verified=False,
         )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
 
-    # Derive username from input or fall back to email prefix
-    desired_username = user_in.username or user_in.email.split("@")[0]
-    base = desired_username
-    suffix = 1
-    while db.query(User).filter(User.username == desired_username).first():
-        desired_username = f"{base}{suffix}"
-        suffix += 1
+        # Generate 6-digit OTP for email verification
+        raw_otp = generate_otp_code()
+        hashed_otp = hash_otp(raw_otp)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
-    hashed_password = get_password_hash(user_in.password)
-    db_user = User(
-        email=user_in.email,
-        username=desired_username,
-        hashed_password=hashed_password,
-        is_verified=False,
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+        otp_record = AuthOTP(
+            user_id=db_user.id,
+            email=db_user.email,
+            purpose="email_verification",
+            otp_hash=hashed_otp,
+            expires_at=expires_at,
+        )
+        db.add(otp_record)
+        db.commit()
 
-    # Generate 6-digit OTP for email verification
-    raw_otp = generate_otp_code()
-    hashed_otp = hash_otp(raw_otp)
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        # Send verification email via Gmail API / SMTP
+        send_verification_otp(db_user.email, raw_otp)
 
-    otp_record = AuthOTP(
-        user_id=db_user.id,
-        email=db_user.email,
-        purpose="email_verification",
-        otp_hash=hashed_otp,
-        expires_at=expires_at,
-    )
-    db.add(otp_record)
-    db.commit()
-
-    # Send verification email via Gmail API / SMTP
-    send_verification_otp(db_user.email, raw_otp)
-
-    return db_user
+        return db_user
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error in user registration: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Registration failed: {type(e).__name__}: {str(e)}",
+        )
 
 
 @router.post("/verify-email")
