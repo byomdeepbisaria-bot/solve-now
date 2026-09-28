@@ -1,4 +1,5 @@
 from .user import User, Role, Profile
+from .auth_otp import AuthOTP
 from .problem import Problem, Category, Tag, ProblemFile, problem_tags
 from .ai_investigation import AIInvestigation, AIFinding, ProblemClarification, AIAction, AIMessage, AIProposedSolution, AICriticReview, InvestigationStatus
 from .solution import Solution, SolutionVote, SolutionVerification, SolutionComment, SolutionStatus

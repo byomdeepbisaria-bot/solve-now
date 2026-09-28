@@ -42,7 +42,3 @@ Desktop.ini
 logs/
 *.log
 .env*
-credentials.json
-credentials*.json
-token.json
-token*.json
