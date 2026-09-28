@@ -59,6 +59,8 @@ async def lifespan(app: FastAPI):
             alembic_ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
             if os.path.exists(alembic_ini_path):
                 alembic_cfg = Config(alembic_ini_path)
+                script_dir = os.path.join(os.path.dirname(__file__), "migrations")
+                alembic_cfg.set_main_option("script_location", script_dir)
                 command.upgrade(alembic_cfg, "head")
                 logger.info("Database migrations applied successfully.")
             else:
