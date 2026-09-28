@@ -53,12 +53,15 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
             desired_username = f"{base}{suffix}"
             suffix += 1
 
+        now = datetime.now(timezone.utc)
         hashed_password = get_password_hash(user_in.password)
         db_user = User(
             email=user_in.email,
             username=desired_username,
             hashed_password=hashed_password,
+            is_active=True,
             is_verified=False,
+            created_at=now,
         )
         db.add(db_user)
         db.commit()

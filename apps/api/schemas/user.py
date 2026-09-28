@@ -22,10 +22,10 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: uuid.UUID
     username: Optional[str] = None
-    is_active: bool
-    is_verified: bool
+    is_active: bool = True
+    is_verified: bool = False
     role: Optional[str] = None  # Serialized as role name string e.g. "ADMIN"
-    created_at: datetime
+    created_at: Optional[datetime] = None
 
     @field_validator("role", mode="before")
     @classmethod
