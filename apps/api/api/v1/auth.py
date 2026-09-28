@@ -96,7 +96,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         logger.exception("Error in user registration: %s", e)
         raise HTTPException(
             status_code=500,
-            detail=f"Registration error: {e}",
+            detail="Registration failed due to a server error. Please try again later.",
         )
 
 
