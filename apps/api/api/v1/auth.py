@@ -25,6 +25,15 @@ from api.deps import get_current_user, get_token_from_cookie
 router = APIRouter()
 
 
+def _ensure_tz(dt: datetime) -> datetime:
+    """Ensure a datetime object is timezone-aware UTC for safe comparisons."""
+    if dt is None:
+        return dt
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 @router.post("/register", response_model=UserResponse)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == user_in.email).first():
@@ -99,7 +108,7 @@ def verify_email(payload: VerifyEmailOTP, db: Session = Depends(get_db)):
             status_code=400, detail="No active verification code found. Please resend code."
         )
 
-    if otp_record.expires_at < now:
+    if _ensure_tz(otp_record.expires_at) < now:
         raise HTTPException(
             status_code=400, detail="Verification code has expired. Please request a new code."
         )
@@ -150,7 +159,7 @@ def resend_otp(payload: ResendOTPRequest, db: Session = Depends(get_db)):
 
     # 60-second cooldown check
     if last_otp and last_otp.last_sent_at:
-        elapsed = (now - last_otp.last_sent_at).total_seconds()
+        elapsed = (now - _ensure_tz(last_otp.last_sent_at)).total_seconds()
         if elapsed < 60:
             remaining = int(60 - elapsed)
             raise HTTPException(
@@ -208,7 +217,7 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     )
 
     if last_otp and last_otp.last_sent_at:
-        elapsed = (now - last_otp.last_sent_at).total_seconds()
+        elapsed = (now - _ensure_tz(last_otp.last_sent_at)).total_seconds()
         if elapsed < 60:
             return generic_msg
 
@@ -256,7 +265,7 @@ def verify_reset_otp(payload: VerifyResetOTPRequest, db: Session = Depends(get_d
             status_code=400, detail="No active password reset code found. Please request a new code."
         )
 
-    if otp_record.expires_at < now:
+    if _ensure_tz(otp_record.expires_at) < now:
         raise HTTPException(
             status_code=400, detail="Password reset code has expired. Please request a new code."
         )
