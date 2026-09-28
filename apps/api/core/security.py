@@ -21,9 +21,18 @@ def create_access_token(
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def _truncate_password(password: str) -> str:
+    if not password:
+        return ""
+    # Truncate to 72 bytes to prevent bcrypt ValueError in passlib
+    pwd_bytes = password.encode("utf-8")[:72]
+    return pwd_bytes.decode("utf-8", errors="ignore")
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(_truncate_password(plain_password), hashed_password)
+
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(_truncate_password(password))
 
