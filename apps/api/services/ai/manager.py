@@ -7,13 +7,14 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class ManagedAIProvider(AIProvider):
     def __init__(self):
         self.primary = None
         self.fallback = None
-        
+
         provider_preference = settings.AI_PROVIDER.lower()
-        
+
         if provider_preference == "groq":
             first_class, second_class = GroqProvider, GeminiProvider
         else:
@@ -22,36 +23,29 @@ class ManagedAIProvider(AIProvider):
         try:
             self.primary = first_class()
         except Exception as e:
-            logger.warning(f"Failed to initialize primary provider {first_class.__name__}")
-            
+            logger.warning(f"Failed to initialize primary provider {first_class.__name__}: {e}")
+
         try:
             self.fallback = second_class()
         except Exception as e:
-            logger.warning(f"Failed to initialize fallback provider {second_class.__name__}")
-
-        if not self.primary and not self.fallback:
-            self.final_fallback = FallbackAIProvider()
-        else:
-            self.final_fallback = None
+            logger.warning(f"Failed to initialize fallback provider {second_class.__name__}: {e}")
 
     def generate_chat_response(self, prompt: str, system_prompt: str = "") -> str:
-        # Try Primary
+        # Try Primary cloud provider
         if self.primary:
             try:
                 return self.primary.generate_chat_response(prompt, system_prompt)
             except Exception as e:
-                logger.warning(f"Primary provider failed: {e}")
-                
-        # Try Fallback
+                logger.warning(f"Primary AI provider failed: {e}")
+
+        # Try Secondary cloud provider
         if self.fallback:
             try:
                 return self.fallback.generate_chat_response(prompt, system_prompt)
             except Exception as e:
-                logger.error(f"Fallback provider also failed: {e}")
-                raise RuntimeError("Both primary and fallback AI providers failed.")
-                
-        # Only use final fallback if no remote providers could even be initialized
-        if self.final_fallback:
-            return self.final_fallback.generate_chat_response(prompt, system_prompt)
-            
-        raise RuntimeError("No AI providers available.")
+                logger.warning(f"Secondary AI provider failed: {e}")
+
+        # Fallback to deterministic FallbackAIProvider — prevents 500 crashes
+        # when external cloud API keys are unconfigured or unreachable.
+        logger.info("Using FallbackAIProvider for AI response generation.")
+        return FallbackAIProvider().generate_chat_response(prompt, system_prompt)
