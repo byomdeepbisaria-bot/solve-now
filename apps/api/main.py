@@ -165,10 +165,23 @@ def health_check():
 
 @app.get("/ready", tags=["monitoring"])
 def readiness_check(db: Session = Depends(get_db)):
-    """Readiness probe â€” checks database connectivity before accepting traffic."""
+    """Readiness probe — checks database connectivity and schema tables."""
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "database": "connected"}
+        tbl_users = db.execute(text("SELECT to_regclass('public.users')")).scalar()
+        tbl_otps = db.execute(text("SELECT to_regclass('public.auth_otps')")).scalar()
+        ver_check = None
+        try:
+            ver_check = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        except Exception:
+            pass
+        return {
+            "status": "ok" if tbl_otps else "degraded",
+            "database": "connected",
+            "users_table": str(tbl_users),
+            "auth_otps_table": str(tbl_otps),
+            "alembic_version": str(ver_check),
+        }
     except Exception as e:
         logger.error(f"Readiness check failed: {e}")
         return JSONResponse(status_code=503, content={"status": "unavailable", "database": "disconnected"})
