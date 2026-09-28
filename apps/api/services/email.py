@@ -19,24 +19,28 @@ def _get_gmail_access_token() -> Optional[str]:
     GMAIL_CLIENT_ID, and GMAIL_CLIENT_SECRET via Google OAuth2 token endpoint.
     No local token.json file is required — works seamlessly in Render containers.
     """
-    client_id = os.environ.get("GMAIL_CLIENT_ID") or getattr(settings, "GMAIL_CLIENT_ID", None)
-    client_secret = os.environ.get("GMAIL_CLIENT_SECRET") or getattr(settings, "GMAIL_CLIENT_SECRET", None)
-    refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN") or getattr(settings, "GMAIL_REFRESH_TOKEN", None)
-
-    if not (client_id and client_secret and refresh_token):
-        return None
-
-    url = "https://oauth2.googleapis.com/token"
-    data = urllib.parse.urlencode({
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "refresh_token": refresh_token,
-        "grant_type": "refresh_token",
-    }).encode("utf-8")
-
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
-
     try:
+        client_id = os.environ.get("GMAIL_CLIENT_ID") or getattr(settings, "GMAIL_CLIENT_ID", None)
+        client_secret = os.environ.get("GMAIL_CLIENT_SECRET") or getattr(settings, "GMAIL_CLIENT_SECRET", None)
+        refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN") or getattr(settings, "GMAIL_REFRESH_TOKEN", None)
+
+        if not (client_id and client_secret and refresh_token):
+            return None
+
+        client_id = str(client_id).strip().strip("'\"")
+        client_secret = str(client_secret).strip().strip("'\"")
+        refresh_token = str(refresh_token).strip().strip("'\"")
+
+        url = "https://oauth2.googleapis.com/token"
+        data = urllib.parse.urlencode({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }).encode("utf-8")
+
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+
         with urllib.request.urlopen(req, timeout=10) as resp:
             res_json = json.loads(resp.read().decode("utf-8"))
             return res_json.get("access_token")
@@ -49,40 +53,41 @@ def _send_email_via_gmail_api(to_email: str, subject: str, html_content: str) ->
     """
     Send an email via the Gmail REST API (v1) using an OAuth2 Access Token.
     """
-    access_token = _get_gmail_access_token()
-    if not access_token:
-        return False
-
-    sender_email = (
-        os.environ.get("GMAIL_SENDER_EMAIL")
-        or getattr(settings, "GMAIL_SENDER_EMAIL", None)
-        or "noreply@solvenow.app"
-    )
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = to_email
-
-    html_part = MIMEText(html_content, "html")
-    msg.attach(html_part)
-
-    raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
-
-    url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
-    body = json.dumps({"raw": raw_message}).encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
     try:
+        access_token = _get_gmail_access_token()
+        if not access_token:
+            return False
+
+        sender_email = (
+            os.environ.get("GMAIL_SENDER_EMAIL")
+            or getattr(settings, "GMAIL_SENDER_EMAIL", None)
+            or "noreply@solvenow.app"
+        )
+        sender_email = str(sender_email).strip().strip("'\"")
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = sender_email
+        msg["To"] = to_email
+
+        html_part = MIMEText(html_content, "html")
+        msg.attach(html_part)
+
+        raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
+
+        url = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+        body = json.dumps({"raw": raw_message}).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status in (200, 201, 202):
                 logger.info(f"Email successfully sent via Gmail API to {to_email}")
@@ -97,22 +102,22 @@ def _send_email_via_smtp(to_email: str, subject: str, html_content: str) -> bool
     """
     Fallback: Send email via standard SMTP if configured.
     """
-    smtp_host = settings.SMTP_HOST
-    smtp_port = settings.SMTP_PORT
-    smtp_user = settings.SMTP_USER
-    smtp_password = settings.SMTP_PASSWORD
-    smtp_from = settings.SMTP_FROM_EMAIL or "noreply@solvenow.app"
-
-    if not (smtp_host and smtp_user and smtp_password):
-        return False
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = smtp_from
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_content, "html"))
-
     try:
+        smtp_host = getattr(settings, "SMTP_HOST", None)
+        smtp_port = getattr(settings, "SMTP_PORT", 587)
+        smtp_user = getattr(settings, "SMTP_USER", None)
+        smtp_password = getattr(settings, "SMTP_PASSWORD", None)
+        smtp_from = getattr(settings, "SMTP_FROM_EMAIL", "noreply@solvenow.app")
+
+        if not (smtp_host and smtp_user and smtp_password):
+            return False
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = smtp_from
+        msg["To"] = to_email
+        msg.attach(MIMEText(html_content, "html"))
+
         with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(smtp_user, smtp_password)
@@ -131,16 +136,20 @@ def send_email(to_email: str, subject: str, html_content: str) -> bool:
     If no credentials are configured, logs a warning and returns False cleanly
     so application routes do not crash.
     """
-    if _send_email_via_gmail_api(to_email, subject, html_content):
-        return True
+    try:
+        if _send_email_via_gmail_api(to_email, subject, html_content):
+            return True
 
-    if _send_email_via_smtp(to_email, subject, html_content):
-        return True
+        if _send_email_via_smtp(to_email, subject, html_content):
+            return True
 
-    logger.warning(
-        f"Email sending skipped for {to_email}: No valid Gmail API or SMTP credentials configured."
-    )
-    return False
+        logger.warning(
+            f"Email sending skipped for {to_email}: No valid Gmail API or SMTP credentials configured."
+        )
+        return False
+    except Exception as e:
+        logger.error(f"Error in send_email for {to_email}: {e}")
+        return False
 
 
 def send_verification_otp(to_email: str, otp_code: str) -> bool:
